@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EGM Basketball Build-A-Beauty</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+
+
+<!-- HOME PAGE -->
+<div class="app-container" id="home-screen">
+    <h1 class="main-title">🏀 EGM Basketball</h1>
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="play">🎮 Play</button>
+        <button class="tab-btn" data-tab="powers">⚡ Powers</button>
+        <button class="tab-btn" data-tab="players">📖 Players</button>
+        <button class="tab-btn" data-tab="credits">🎬 Credits</button>
+        <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+        <!-- hidden until the lock opens in-game -->
+        <button id="secret-btn" class="tab-btn secret hidden" title="Secret code">🔑</button>
+    </div>
+
+    <div id="tab-play">
+        <p class="section-tagline">Play solo, run a tournament, or take on the AI. Pick a mode:</p>
+        <div id="reward-banner" class="reward-banner"></div>
+        <div class="difficulty-grid">
+            <div class="difficulty-card solo" data-level="solo"><h3>🎮 Play Solo</h3><p>No AI. Just build the best team you can.</p></div>
+            <div class="difficulty-card tournament" data-level="tournament"><h3>🏆 Tournament</h3><p>Draft a team for every new school you play: Quarterfinal, Semifinal and Final in a real animated 8-team bracket. Scout every team, think about your weak stats, and lose once and you are out! Diesem from H.S. Paul only shows up here.</p></div>
+            <div class="difficulty-card twop" data-level="2p"><h3>👥 2 Player <span class="beta">(beta testing)</span> <span id="twop-lock"></span></h3><p>Pass the laptop and draft head to head. Win the Tournament to unlock it.</p></div>
+            <div class="difficulty-card easy" data-level="easy"><h3>😎 Easy</h3><p>Weak AI. Win to save +1 extra re-spin in your Powers tab.</p></div>
+            <div class="difficulty-card medium" data-level="medium"><h3>🙂 Medium</h3><p>Fair AI. Win to save a Medium boost (2× Nico chance + more Silver players on your first spin) in your Powers tab.</p></div>
+            <div class="difficulty-card hard" data-level="hard"><h3>😤 Hard</h3><p>Smart AI. Win to save a Hard boost (4× Nico chance on your first spin) in your Powers tab.</p></div>
+            <div class="difficulty-card extreme" data-level="extreme"><h3>💀 Extreme</h3><p>Brutal AI. Win to get 2 Nico Wheel spins (78% each) saved in your Powers tab.</p></div>
+        </div>
+    </div>
+
+    <div id="tab-powers" class="hidden"></div>
+    <div id="tab-players" class="hidden"></div>
+
+    <div id="tab-credits" class="hidden">
+        <div class="credits-grid">
+            <div class="credit-section"><h3>👑 Developer</h3><p>Built the whole game</p><div class="credit-names"><span class="credit-pill rainbow-text">Ose</span></div></div>
+            <div class="credit-section"><h3>🧪 Game Testers</h3><p>Played it, broke it, helped fix it</p><div class="credit-names"><span class="credit-pill">Josh</span><span class="credit-pill">Nico</span><span class="credit-pill">Coen</span></div></div>
+            <div class="credit-section"><h3>📊 Stat Architects</h3><p>Made the player stats and ratings</p><div class="credit-names"><span class="credit-pill">Josh</span><span class="credit-pill">Nico</span><span class="credit-pill">Coen</span></div></div>
+            <div class="credit-section"><h3>🤝 Co-Creators</h3><p>Helped make the game happen</p><div class="credit-names"><span class="credit-pill">Josh</span><span class="credit-pill">Nico</span><span class="credit-pill">Coen</span><button id="fan-secret" class="credit-pill secret-pill hidden">secret</button></div></div>
+        </div>
+    </div>
+
+    <div id="tab-settings" class="hidden">
+        <div class="credits-grid">
+            <div class="credit-section">
+                <h3>🎨 Game Color</h3>
+                <p>Pick the main color of the whole game</p>
+                <div id="set-swatches" class="swatch-row"></div>
+                <input type="color" id="set-color" value="#0071e3">
+            </div>
+            <div class="credit-section">
+                <h3>✨ Effects</h3>
+                <p>Turn stuff on or off</p>
+                <label class="set-row"><input type="checkbox" id="set-anim"><span>Animations (the big popups)</span></label>
+                <label class="set-row"><input type="checkbox" id="set-gifs"><span>GIFs (off = no gifs anywhere)</span></label>
+                <label class="set-row"><input type="checkbox" id="set-tabs"><span>Rank tabs (gold / diamond / red tab)</span></label>
+                <label class="set-row"><input type="checkbox" id="set-rollcolors"><span>Menu color changes on special rolls</span></label>
+                <label class="set-row"><input type="checkbox" id="set-lose"><span>Lose screen</span></label>
+                <label class="set-row"><input type="checkbox" id="set-nocd"><span>Skip the popup wait timer (Bryden's trap still makes you wait)</span></label>
+            </div>
+            <div class="credit-section">
+                <button id="set-reset" class="apple-btn action-restart-btn">↩️ Reset settings</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- GAME PAGE -->
+<div class="app-container hidden" id="game-screen">
+    <header class="app-navigation">
+        <div class="nav-left"><button id="home-btn" class="home-btn">🚪 Quit</button><span id="difficulty-tag" class="difficulty-tag"></span></div>
+        <span class="school-tag">EGM Athletics</span>
+    </header>
+
+    <main class="builder-viewport">
+        <section class="viewport-column selection-deck">
+            <h1 class="main-title">EGM Basketball</h1>
+            <p class="section-tagline">Assemble the Ultimate Baller</p>
+
+            <div class="slot-machine-box">
+                <div class="slot-header">CURRENT PACK DRAW</div>
+                <div id="player-name" class="slot-display">🎰 HIT SPIN TO START</div>
+            </div>
+
+            <div id="rank-tab" class="rank-tab hidden"></div>
+
+            <div class="button-action-strip">
+                <button id="roll-btn" class="apple-btn action-spin-btn">🏀 SPIN PLAYER</button>
+                <button id="respin-btn" class="apple-btn action-counter-btn" disabled>3 RE-SPINS LEFT</button>
+                <button id="clear-btn" class="apple-btn action-restart-btn">🔄 RESTART</button>
+                <button id="lucky-btn" class="apple-btn action-lucky-btn hidden" disabled>🎡 NICO WHEEL (2 LEFT)</button>
+                <button id="luck-btn" class="apple-btn action-luck-btn hidden" disabled>🍀 USE 8× LUCK (0 LEFT)</button>
+            </div>
+
+            <div id="ai-status" class="ai-status">🤖 AI is waiting for your first pick...</div>
+            <div id="draft-pool" class="stat-picker-stack">
+                <div class="placeholder-notice">Click "SPIN PLAYER" above to open your first classmate card stack.</div>
+            </div>
+        </section>
+
+        <section class="viewport-column inventory-tracker hidden">
+            <div class="avatar-card">
+                <div class="avatar-icon">🧍‍♂️</div>
+                <div class="avatar-info">
+                    <h3>Your Custom Roster Build</h3>
+                    <div id="overall-rating" class="grade-pill-display">OVERALL: --</div>
+                </div>
+            </div>
+
+            <div id="my-build" class="inventory-slots-list"></div>
+        </section>
+    </main>
+
+    <section class="ai-viewport hidden">
+        <div class="ai-header">
+            <h2>🤖 AI Opponent Build</h2>
+            <div id="ai-overall" class="grade-pill-display">AI OVERALL: ??</div>
+        </div>
+        <div id="ai-build" class="ai-grid"></div>
+    </section>
+
+    <section class="vs-viewport-home">
+        <div class="vs-header-home">
+            <h2>🤖 1v1 Court Showdown Arena</h2>
+            <p>Pit your finished draft build directly against an automated EGM opponent bot player.</p>
+        </div>
+
+        <div class="court-floor-home">
+            <div class="team-card user-team">
+                <div class="team-avatar">🌟</div>
+                <h3>Your Drafted Legend</h3>
+                <div id="user-court-ovr" class="court-ovr-tag">OVR: --</div>
+            </div>
+
+            <div class="vs-divider">VS</div>
+
+            <div class="team-card cpu-team">
+                <div class="team-avatar">🤖</div>
+                <h3>EGM Opponent Bot</h3>
+                <div id="cpu-court-ovr" class="court-ovr-tag">OVR: --</div>
+            </div>
+        </div>
+
+        <div class="vs-controls">
+            <button id="simulate-match-btn" class="apple-btn primary-btn" disabled>🔥 SIMULATE COURT MATCH</button>
+        </div>
+
+        <div id="match-ticker-box" class="match-log">
+            <div class="log-placeholder">Complete your custom roster build above to unlock the court simulation scoreboard!</div>
+        </div>
+    </section>
+
+    <section class="leaderboard-viewport-home">
+        <h2>🏆 EGM All-Time Leaderboard</h2>
+        <div class="table-frame">
+            <table class="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th>RANK</th>
+                        <th>BALLER ID</th>
+                        <th>OVERALL GRADE</th>
+                        <th>TIER LEVEL</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-rows"></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
