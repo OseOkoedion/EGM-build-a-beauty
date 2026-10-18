@@ -433,3 +433,25 @@ video.trapped-gif { background: #000; }
 .pv-card.pv-mini .trapped-chains { font-size: 18px; }
 .pv-card.pv-mini .trapped-text { font-size: 14px; }
 .pv-card.pv-mini .trapped-chat { font-size: 9px; }
+
+/* ===== ONLINE ACCOUNT TAB ===== */
+.acct-form { display: flex; flex-direction: column; gap: 10px; max-width: 380px; margin: 14px auto 0; }
+.acct-form .sec-input { flex: 0 0 auto; width: 100%; }
+textarea.sec-input { min-height: 90px; resize: vertical; }
+.acct-msg { min-height: 20px; margin-top: 12px; font-weight: 800; font-size: 14px; color: #ff453a; }
+.acct-msg.ok { color: #30d158; }
+.acct-head { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+.acct-avatar { font-size: 44px; background: #1c1c1e; border: 1px solid #3a3a3c; border-radius: 16px; padding: 8px 14px; }
+.acct-name { font-size: 26px; font-weight: 800; }
+.acct-badge { display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px; vertical-align: middle; border: 1px solid; }
+.acct-badge.tester { color: #64d2ff; border-color: #64d2ff; }
+.acct-badge.admin { color: #ffd60a; border-color: #ffd60a; }
+.acct-avatars { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+.acct-avatars button { font-size: 24px; background: #1c1c1e; border: 2px solid #3a3a3c; border-radius: 12px; padding: 6px 10px; cursor: pointer; }
+.acct-avatars button.on { border-color: var(--accent); }
+.acct-h { margin: 18px 0 6px; color: #8e8e93; font-size: 14px; letter-spacing: 1px; }
+.acct-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.acct-stat { background: #1c1c1e; border: 1px solid #3a3a3c; border-radius: 14px; padding: 10px; }
+.acct-stat b { display: block; font-size: 22px; }
+.acct-stat span { color: #8e8e93; font-size: 12px; font-weight: 800; }
+.acct-report { text-align: left; background: #1c1c1e; border: 1px solid #3a3a3c; border-radius: 12px; padding: 10px; margin-top: 8px; font-size: 14px; }
