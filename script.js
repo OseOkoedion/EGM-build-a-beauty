@@ -51,6 +51,9 @@ const BASE_PLAYERS = [
   { name: "Alejandro", tier: "Silver", stats: { scoring: 74, iq: 71, rebounding: 73, defence: 70, speed: 75, stamina: 71, handles: 71, passing: 73, athleticiem: 74, physicality: 71 } },
   { name: "Coen", tier: "Silver", stats: { scoring: 76, iq: 74, rebounding: 75, defence: 72, speed: 78, stamina: 73, handles: 75, passing: 74, athleticiem: 76, physicality: 72 } },
   { name: "Kody", tier: "Silver", stats: { scoring: 81, iq: 76, rebounding: 68, defence: 77, speed: 87, stamina: 96, handles: 79, passing: 83, athleticiem: 82, physicality: 77 } },
+  { name: "Logan VM", tier: "Gold", stats: { scoring: 92, iq: 91, rebounding: 93, defence: 97, speed: 92, stamina: 94, handles: 79, passing: 93, athleticiem: 97, physicality: 84 } }, 
+  { name: "allie & callie", tier: "Bronze", bad: true, stats: { scoring: 1, iq: 0, rebounding: 0, defence:0, speed: 0, stamina: 5, handles: 0, passing: 7, athleticiem: 44, physicality: 1  }
+},
   // Diesem from H.S. Paul: super rare, 97 overall
   { name: "Diesem", display: "Diesem", hs: true, chanceKey: "diesem", tier: "H.S. Paul", stats: { scoring: 98, iq: 96, rebounding: 95, defence: 97, speed: 98, stamina: 97, handles: 98, passing: 96, athleticiem: 98, physicality: 97 } }
 ];
@@ -2028,3 +2031,293 @@ window.addEventListener('load', () => {
   refreshSecret();
   refreshTwoP();
 });
+
+// =====================================================================
+// EGM BASKETBALL ONLINE - PART 1: accounts, profiles, tester tools
+// =====================================================================
+(function () {
+  'use strict';
+
+  // The anon / publishable key is SAFE here. NEVER paste the "service_role" key.
+  const SUPABASE_URL = 'dcvrbxflbxtfyfysxifb';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjdnJieGZsYnh0ZnlmeXN4aWZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzNTAyNDYsImV4cCI6MjEwNzkyNjI0Nn0.TuXxc8ebv1qV5-aZoEeNaZnUXwFTj_hCAXmGtWrfplA';
+
+  const configured = !/PASTE_/.test(SUPABASE_URL + SUPABASE_ANON_KEY);
+  let sb = null;
+  if (configured && window.supabase && window.supabase.createClient) {
+    try {
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      });
+    } catch (e) { console.warn('Supabase failed to start', e); }
+  }
+
+  const S = { user: null, profile: null, stats: null, role: 'player', flags: [] };
+  window.EGM_ONLINE = {
+    get client() { return sb; },
+    state: S,
+    canUse: key => canUse(key)
+  };
+
+  let view = 'login', busy = false, recovery = false, manualLogout = false;
+  let msg = { text: '', ok: false };
+  let reports = [];
+
+  const AVATARS = ['🏀', '🔥', '👑', '⚡', '🛡️', '🚀', '💎', '🐐', '😎', '🦁'];
+  const h = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const panel = () => document.getElementById('tab-account');
+  const val = id => { const e = document.getElementById(id); return e ? e.value : ''; };
+  const redirectUrl = () => location.origin + location.pathname;
+
+  function canUse(key) {
+    const f = S.flags.find(x => x.key === key);
+    if (!f) return false;
+    if (S.role === 'admin' || f.audience === 'everyone') return true;
+    return f.audience === 'testers' && S.role === 'tester';
+  }
+
+  function friendly(err) {
+    const m = ((err && err.message) || '').toLowerCase();
+    if (m.includes('invalid login')) return 'Wrong email or password.';
+    if (m.includes('email not confirmed')) return 'Verify your email first: check your inbox (and spam) for the link.';
+    if (m.includes('already registered') || m.includes('already been registered')) return 'That email already has an account. Try logging in.';
+    if (m.includes('database error saving new user')) return 'That username is invalid or was just taken. Try another.';
+    if (m.includes('rate limit') || m.includes('too many')) return 'Too many tries. Wait a few minutes and try again.';
+    if (m.includes('jwt') || m.includes('expired')) return 'Your session expired. Please log in again.';
+    if (m.includes('failed to fetch') || m.includes('network')) return "Can't reach the online service. Solo modes still work.";
+    return (err && err.message) ? err.message : 'Something went wrong.';
+  }
+
+  function say(text, ok) {
+    msg = { text: text || '', ok: !!ok };
+    const m = document.getElementById('acct-msg');
+    if (m) { m.textContent = msg.text; m.className = 'acct-msg' + (ok ? ' ok' : ''); }
+  }
+  const msgHtml = () => '<div id="acct-msg" class="acct-msg' + (msg.ok ? ' ok' : '') + '">' + h(msg.text) + '</div>';
+
+  async function run(fn) {
+    if (busy) return;
+    busy = true; say('');
+    const p = panel(); if (p) p.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    try { await fn(); } catch (e) { say(friendly(e), false); render(); }
+    busy = false;
+    const p2 = panel(); if (p2) p2.querySelectorAll('button').forEach(b => { b.disabled = false; });
+  }
+
+  // ---------------- actions ----------------
+  async function doLogin() {
+    const email = val('a-email').trim(), password = val('a-pass');
+    if (!email || !password) return say('Enter your email and password.', false);
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  }
+
+  async function doSignup() {
+    const email = val('a-email').trim(), password = val('a-pass'), uname = val('a-user').trim();
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(uname)) return say('Username: 3-16 letters, numbers or _ only.', false);
+    if (!email.includes('@')) return say('Enter a valid email.', false);
+    if (password.length < 8) return say('Password must be at least 8 characters.', false);
+    const chk = await sb.rpc('username_available', { uname });
+    if (chk.error) throw chk.error;
+    if (!chk.data) return say('That username is taken. Try another.', false);
+    const { data, error } = await sb.auth.signUp({
+      email, password, options: { data: { username: uname }, emailRedirectTo: redirectUrl() }
+    });
+    if (error) throw error;
+    if (data.user && data.user.identities && data.user.identities.length === 0) return say('That email already has an account. Try logging in.', false);
+    if (!data.session) { view = 'login'; say('Account created! Click the verification link we emailed you, then log in.', true); render(); return; }
+    say('Welcome, ' + uname + '!', true);
+  }
+
+  async function doForgot() {
+    const email = val('a-email').trim();
+    if (!email.includes('@')) return say('Enter the email of your account.', false);
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl() });
+    if (error) throw error;
+    say('If that email has an account, a reset link is on its way.', true);
+  }
+
+  async function doNewPassword() {
+    const a = val('a-new1'), b = val('a-new2');
+    if (a.length < 8) return say('Password must be at least 8 characters.', false);
+    if (a !== b) return say('The two passwords do not match.', false);
+    const { error } = await sb.auth.updateUser({ password: a });
+    if (error) throw error;
+    recovery = false; say('Password changed!', true);
+    await loadUser(S.user || (await sb.auth.getUser()).data.user);
+  }
+
+  async function doLogout() { manualLogout = true; const { error } = await sb.auth.signOut(); if (error) throw error; }
+
+  async function doAvatar(avatar) {
+    const { error } = await sb.from('profiles').update({ avatar }).eq('id', S.user.id);
+    if (error) throw error;
+    S.profile.avatar = avatar; render();
+  }
+
+  async function doReport() {
+    const kind = val('r-kind'), message = val('r-msg').trim();
+    if (message.length < 5) return say('Write at least a few words.', false);
+    const { error } = await sb.from('bug_reports').insert({ user_id: S.user.id, kind, message });
+    if (error) throw error;
+    render(); say('Thanks! Your report was sent.', true);
+    if (S.role === 'admin') loadReports();
+  }
+
+  async function doSetRole(role) {
+    const name = val('ad-user').trim();
+    if (!name) return say('Type a username.', false);
+    const { error } = await sb.rpc('set_user_role', { target_username: name, new_role: role });
+    if (error) throw error;
+    say(role === 'tester' ? name + ' is now a tester.' : name + ' is a normal player again.', true);
+  }
+
+  async function doResolve(id) {
+    const { error } = await sb.from('bug_reports').update({ status: 'resolved' }).eq('id', id);
+    if (error) throw error;
+    await loadReports(); say('Marked resolved.', true);
+  }
+
+  // ---------------- loading ----------------
+  async function loadReports() {
+    if (S.role !== 'admin') return;
+    const r = await sb.from('bug_reports').select('id,kind,message,created_at,profiles(username)')
+      .eq('status', 'open').order('created_at', { ascending: false }).limit(20);
+    reports = r.data || []; render();
+  }
+
+  async function loadUser(user) {
+    if (!user) {
+      const expired = S.user && !manualLogout;
+      S.user = S.profile = S.stats = null; S.role = 'player'; S.flags = []; reports = [];
+      if (expired) msg = { text: 'Your session ended. Please log in again.', ok: false };
+      manualLogout = false; render(); return;
+    }
+    S.user = user;
+    try {
+      let p = await sb.from('profiles').select('id,username,avatar,created_at').eq('id', user.id).maybeSingle();
+      if (!p.data && !p.error) { await new Promise(r => setTimeout(r, 800)); p = await sb.from('profiles').select('id,username,avatar,created_at').eq('id', user.id).maybeSingle(); }
+      if (p.error) throw p.error;
+      S.profile = p.data;
+      const [st, ro, fl] = await Promise.all([
+        sb.from('player_stats').select('*').eq('user_id', user.id).maybeSingle(),
+        sb.from('user_roles').select('role').eq('user_id', user.id).maybeSingle(),
+        sb.from('feature_flags').select('key,audience,description').order('key')
+      ]);
+      S.stats = st.data; S.role = (ro.data && ro.data.role) || 'player'; S.flags = fl.data || [];
+    } catch (e) { msg = { text: friendly(e), ok: false }; }
+    render();
+    if (S.role === 'admin') loadReports();
+  }
+
+  // ---------------- screens ----------------
+  function authHtml() {
+    const names = { login: 'Log in', signup: 'Sign up', forgot: 'Forgot password' };
+    const tabs = Object.keys(names).map(v => '<button class="apple-btn ' + (view === v ? 'action-spin-btn' : 'action-counter-btn') + '" data-view="' + v + '">' + names[v] + '</button>').join('');
+    let f = '';
+    if (view === 'login') f = '<input id="a-email" class="sec-input" type="email" autocomplete="email" placeholder="Email"><input id="a-pass" class="sec-input" type="password" autocomplete="current-password" placeholder="Password"><button id="a-go" class="apple-btn action-spin-btn">Log in</button>';
+    if (view === 'signup') f = '<input id="a-user" class="sec-input" maxlength="16" autocomplete="username" placeholder="Username (3-16: letters, numbers, _)"><input id="a-email" class="sec-input" type="email" autocomplete="email" placeholder="Email (kept private)"><input id="a-pass" class="sec-input" type="password" autocomplete="new-password" placeholder="Password (8+ characters)"><button id="a-go" class="apple-btn action-spin-btn">Create account</button>';
+    if (view === 'forgot') f = '<input id="a-email" class="sec-input" type="email" autocomplete="email" placeholder="Email of your account"><button id="a-go" class="apple-btn action-spin-btn">Send reset link</button>';
+    return '<div class="credit-section"><h3>🌐 Online Account</h3><p>Log in to save your progress on every device. Solo, Tournament and AI modes work without an account.</p>' +
+      '<div class="pw-btns">' + tabs + '</div><div class="acct-form">' + f + '</div>' + msgHtml() + '</div>';
+  }
+
+  function recoveryHtml() {
+    return '<div class="credit-section"><h3>🔑 Choose a new password</h3><div class="acct-form">' +
+      '<input id="a-new1" class="sec-input" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">' +
+      '<input id="a-new2" class="sec-input" type="password" autocomplete="new-password" placeholder="Repeat new password">' +
+      '<button id="a-go" class="apple-btn action-spin-btn">Save new password</button></div>' + msgHtml() + '</div>';
+  }
+
+  function statBox(label, value) { return '<div class="acct-stat"><b>' + h(value) + '</b><span>' + h(label) + '</span></div>'; }
+  const rate = (w, n) => n > 0 ? Math.round(w / n * 100) + '%' : '-';
+  const rankName = r => r >= 2200 ? 'Elite' : r >= 1900 ? 'Diamond' : r >= 1600 ? 'Platinum' : r >= 1300 ? 'Gold' : r >= 1000 ? 'Silver' : 'Bronze';
+
+  function profileHtml() {
+    const p = S.profile, st = S.stats || {};
+    if (!p) return '<div class="credit-section"><h3>🌐 Online Account</h3><p>Loading your profile…</p>' + msgHtml() + '<button id="a-out" class="apple-btn action-restart-btn">Log out</button></div>';
+    const badge = S.role === 'admin' ? '<span class="acct-badge admin">ADMIN</span>' : S.role === 'tester' ? '<span class="acct-badge tester">TESTER</span>' : '';
+    let out = '<div class="credit-section"><div class="acct-head"><div class="acct-avatar">' + h(p.avatar) + '</div><div><div class="acct-name">' + h(p.username) + ' ' + badge + '</div>' +
+      '<p style="margin:2px 0 0">Joined ' + h(new Date(p.created_at).toLocaleDateString()) + '</p></div></div>' +
+      '<div class="acct-avatars">' + AVATARS.map(a => '<button data-av="' + a + '" class="' + (a === p.avatar ? 'on' : '') + '">' + a + '</button>').join('') + '</div>' +
+      '<h4 class="acct-h">Casual</h4><div class="acct-stats">' + statBox('Played', st.casual_played || 0) + statBox('Wins', st.casual_wins || 0) + statBox('Losses', st.casual_losses || 0) + statBox('Win rate', rate(st.casual_wins || 0, st.casual_played || 0)) + '</div>' +
+      '<h4 class="acct-h">Ranked 2v2</h4><div class="acct-stats">' + statBox('Rating', st.ranked_rating == null ? 1000 : st.ranked_rating) + statBox('Tier', rankName(st.ranked_rating == null ? 1000 : st.ranked_rating)) + statBox('Wins', st.ranked_wins || 0) + statBox('Losses', st.ranked_losses || 0) + '</div>' +
+      '<p class="sec-note">Ranked and casual stats are saved by the server only. Ranked matches start in a later part.</p>' +
+      msgHtml() + '<div class="pw-btns" style="margin-top:12px"><button id="a-out" class="apple-btn action-restart-btn">Log out</button></div></div>';
+
+    if (S.role === 'tester' || S.role === 'admin') {
+      out += '<div class="credit-section"><h3>🧪 Tester features</h3><p>Features still being tested. Only testers and admins see these as unlocked.</p>' +
+        (S.flags.length ? S.flags.map(f => '<div class="acct-report"><b>' + h(f.key) + '</b> · ' + (canUse(f.key) ? '✅ unlocked for you' : '🔒 locked') + '<br><small>' + h(f.description || '') + ' (audience: ' + h(f.audience) + ')</small></div>').join('') : '<p>No features listed.</p>') + '</div>';
+    }
+
+    out += '<div class="credit-section"><h3>🐞 Report a bug / send feedback</h3><div class="acct-form">' +
+      '<select id="r-kind" class="sec-input"><option value="bug">🐞 Bug</option><option value="feedback">💬 Feedback</option></select>' +
+      '<textarea id="r-msg" class="sec-input" maxlength="1000" placeholder="What happened? What did you expect?"></textarea>' +
+      '<button id="r-send" class="apple-btn action-spin-btn">Send</button></div></div>';
+
+    if (S.role === 'admin') {
+      out += '<div class="credit-section"><h3>🛠️ Admin</h3><p>Manage testers and read reports. The server checks you are an admin on every action.</p>' +
+        '<div class="acct-form"><input id="ad-user" class="sec-input" placeholder="Username"><div class="pw-btns"><button id="ad-add" class="apple-btn action-spin-btn">Make tester</button><button id="ad-rem" class="apple-btn action-counter-btn">Remove tester</button></div></div>' +
+        '<h4 class="acct-h">Open reports (' + reports.length + ')</h4>' +
+        (reports.length ? reports.map(r => '<div class="acct-report"><b>' + (r.kind === 'bug' ? '🐞' : '💬') + ' ' + h(r.profiles ? r.profiles.username : '?') + '</b> · ' + h(new Date(r.created_at).toLocaleString()) + '<br>' + h(r.message) +
+          '<br><button class="apple-btn action-counter-btn sec-mini" data-resolve="' + r.id + '">✔ Resolve</button></div>').join('') : '<p>No open reports.</p>') + '</div>';
+    }
+    return out;
+  }
+
+  function render() {
+    const p = panel(); if (!p) return;
+    let body;
+    if (!sb) body = '<div class="credit-section"><h3>🌐 Online</h3><p>Online features are not set up or could not load. Solo, Tournament and AI modes still work.</p></div>';
+    else if (recovery) body = recoveryHtml();
+    else if (!S.user) body = authHtml();
+    else body = profileHtml();
+    p.innerHTML = '<div class="credits-grid">' + body + '</div>';
+    wire(p);
+  }
+
+  function wire(p) {
+    const on = (sel, fn) => p.querySelectorAll(sel).forEach(el => { el.onclick = () => fn(el); });
+    on('[data-view]', el => { view = el.dataset.view; msg = { text: '', ok: false }; render(); });
+    on('#a-go', () => run(recovery ? doNewPassword : view === 'signup' ? doSignup : view === 'forgot' ? doForgot : doLogin));
+    p.querySelectorAll('.acct-form input').forEach(i => { i.onkeydown = e => { if (e.key === 'Enter') { const g = document.getElementById('a-go'); if (g) g.click(); } }; });
+    on('#a-out', () => run(doLogout));
+    on('[data-av]', el => run(() => doAvatar(el.dataset.av)));
+    on('#r-send', () => run(doReport));
+    on('#ad-add', () => run(() => doSetRole('tester')));
+    on('#ad-rem', () => run(() => doSetRole('player')));
+    on('[data-resolve]', el => run(() => doResolve(el.dataset.resolve)));
+  }
+
+  // ---------------- start up ----------------
+  function injectTab() {
+    const bar = document.querySelector('#home-screen .tab-bar'), settings = document.getElementById('tab-settings');
+    if (!bar || !settings || document.getElementById('tab-account')) return;
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn'; btn.id = 'acct-tab-btn'; btn.textContent = '🌐 Account';
+    bar.insertBefore(btn, document.getElementById('secret-btn'));
+    const pnl = document.createElement('div');
+    pnl.id = 'tab-account'; pnl.className = 'hidden';
+    settings.parentNode.insertBefore(pnl, settings.nextSibling);
+    btn.onclick = () => {
+      document.querySelectorAll('.tab-btn[data-tab]').forEach(x => x.classList.remove('active'));
+      btn.classList.add('active');
+      ['play', 'powers', 'players', 'credits', 'settings'].forEach(t => { const e = document.getElementById('tab-' + t); if (e) e.classList.add('hidden'); });
+      pnl.classList.remove('hidden'); render();
+    };
+    document.querySelectorAll('.tab-btn[data-tab]').forEach(b => b.addEventListener('click', () => { pnl.classList.add('hidden'); btn.classList.remove('active'); }));
+  }
+
+  function start() {
+    injectTab();
+    render();
+    if (!sb) return;
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED') return;
+      if (event === 'PASSWORD_RECOVERY') { recovery = true; const b = document.getElementById('acct-tab-btn'); if (b) b.click(); }
+      if (event === 'SIGNED_OUT') recovery = false;
+      setTimeout(() => loadUser(session && session.user ? session.user : null), 0);
+    });
+  }
+  window.addEventListener('load', start);
+})();
